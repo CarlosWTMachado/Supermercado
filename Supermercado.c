@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-// #include <conio.h>
 
 typedef struct {
 	int PDV_instalado_tamanho;
@@ -10,8 +9,7 @@ typedef struct {
 	int novos_PDVs_tamanho;
 	int *novos_PDVs;
 	int medida_de_agilidade;
-	int tempos_limites_tamanho;
-	int *tempos_limites;
+	int tempos_limites[3];
 } Setup_sistema;
 
 void PDV_instalado_sistema(Setup_sistema *setup, char *linha){
@@ -34,22 +32,38 @@ void novos_PDVs_sistema(Setup_sistema *setup, char *linha){
 	setup->novos_PDVs[0] = (int) linha[0];
 	setup->novos_PDVs_tamanho = 1;
 	char c = linha[1];
-	for(int a = 1; c != '\n'; a++){
+	for(int i = 1; c != '\n'; i++){
 		if(c != ' '){
-			setup->novos_PDVs = (int *) realloc(setup->novos_PDVs, (a + 1) * sizeof(int));
-			setup->novos_PDVs[a] = (int) c;
+			setup->novos_PDVs = (int *) realloc(setup->novos_PDVs, (i + 1) * sizeof(int));
+			setup->novos_PDVs[i] = (int) c;
 			setup->novos_PDVs_tamanho++;
 		}
-		c = linha[a+1];
+		c = linha[i+1];
 	}
 }
 
 void medida_de_agilidade_sistema(Setup_sistema *setup, char *linha){
 	setup->medida_de_agilidade = 0;
 	for(int i = 0; i < (strlen(linha) - 1); i++){
-		setup->medida_de_agilidade = setup->medida_de_agilidade + (linha[i] * pow(10, (double) strlen(linha) -2 - i));
+		setup->medida_de_agilidade = (int) setup->medida_de_agilidade + ((linha[i] - '0') * pow(10, strlen(linha) - 2 - i));
 	}
-	printf("%d", setup->medida_de_agilidade);
+}
+
+void tempos_limites_sistema(Setup_sistema *setup, char *linha){
+	int flag = 0;
+	int count = 0;
+	setup->tempos_limites[flag] = 0;
+	for(int i = 0; linha[i] != '\n'; i++){
+		if(linha[i] == ' '){
+			flag++;
+			setup->tempos_limites[flag] = 0;
+			count = 0;
+		} else{
+			setup->tempos_limites[flag] = setup->tempos_limites[flag] * pow(10, count);
+			setup->tempos_limites[flag] = setup->tempos_limites[flag] + (linha[i] - '0');
+			count++;
+		}
+	}
 }
 
 // Pontos de Venda (PDVs)
@@ -69,26 +83,24 @@ int main(int argc, char const argv[]) {
 	char *result;
 	int i;
 
-	//clrscr();
-
 	arq = fopen("ent01.in", "rt");
 
 	if (arq != NULL) {
 		i = 1;
 		while (!feof(arq)) {
-			result = fgets(Linha, 50, arq);// o 'fgets' lê até 99 caracteres ou até o '\n'
-			if (result){// Se foi possível ler
+			result = fgets(Linha, 50, arq);
+			if (result){
 				if(i == 1){
 					PDV_instalado_sistema(&setup, Linha);
 				} else if(i == 2){
 					novos_PDVs_sistema(&setup, Linha);
 				} else if(i == 3){
 					medida_de_agilidade_sistema(&setup, Linha);
-					//pow(base, expoente);
-					//for
-					//setup.medida_de_agilidade = ;
+				} else if(i == 4){
+					tempos_limites_sistema(&setup, Linha);
+				}else{
+
 				}
-				//for(int j = 0; Linha[j] != ' '; j++) printf("%c",Linha[j]);
 			}
 			i++;
 		}
