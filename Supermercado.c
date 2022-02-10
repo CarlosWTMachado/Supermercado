@@ -12,6 +12,20 @@ typedef struct {
 	int tempos_limites[3];
 } Setup_sistema;
 
+typedef struct {
+	double Tempo;
+	int qtdeItens;
+	int tipoCliente;
+	int tempoPagamento;
+} Evento_chegada;
+
+typedef struct {
+	double Tempo;
+	int PDV;
+	int duraçãoSuspensão; //minutos
+} Evento_suspensao;
+
+
 void PDV_instalado_sistema(Setup_sistema *setup, char *linha){
 	setup->PDV_instalado = (int *) malloc(sizeof(int));
 	setup->PDV_instalado[0] = (int) linha[0];
@@ -99,7 +113,10 @@ int main(int argc, char const argv[]) {
 				} else if(i == 4){
 					tempos_limites_sistema(&setup, Linha);
 				}else{
+					char character = Linha[0];
+					while(character != 'F'){
 
+					}
 				}
 			}
 			i++;
