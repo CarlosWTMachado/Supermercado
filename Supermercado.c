@@ -4,6 +4,8 @@
 #include <math.h>
 
 typedef struct {
+	int PDVsTamanho;
+	int *PDVs;
 	int PDV_instalado_tamanho;
     int *PDV_instalado;
 	int novos_PDVs_tamanho;
@@ -13,44 +15,139 @@ typedef struct {
 } Setup_sistema;
 
 typedef struct {
-	double Tempo;
+	char tipo;
+	double tempo;
 	int qtdeItens;
 	int tipoCliente;
 	int tempoPagamento;
-} Evento_chegada;
-
-typedef struct {
-	double Tempo;
 	int PDV;
-	int duraçãoSuspensão; //minutos
-} Evento_suspensao;
+	int duracaoSuspensao;
+} Evento;
 
-
-void PDV_instalado_sistema(Setup_sistema *setup, char *linha){
-	setup->PDV_instalado = (int *) malloc(sizeof(int));
-	setup->PDV_instalado[0] = (int) linha[0];
-	setup->PDV_instalado_tamanho = 1;
-	char c = linha[1];
-	for(int a = 1; c != '\n'; a++){
-		if(c != ' '){
-			setup->PDV_instalado = (int *) realloc(setup->PDV_instalado, (a + 1) * sizeof(int));
-			setup->PDV_instalado[a] = (int) c;
-			setup->PDV_instalado_tamanho++;
+Evento criar_evento(char *linha){
+	Evento evento;
+	char c = linha[0];
+	int count = 0;
+	evento.tipo = c;
+	evento.tempo = 0.0;
+	evento.qtdeItens = 0;
+	evento.tipoCliente = 0;
+	evento.tempoPagamento = 0;
+	evento.PDV = 0;
+	evento.duracaoSuspensao = 0;
+	if(c == 'C'){
+		//Tipo Tempo qtdeItens tipoCliente tempoPagamento(ms)
+		for(int i = 1; c != '\n'; i++){
+			c = linha[i];
+			if(c != ' '){
+				if(count == 1){
+					char *tempo = (char *) malloc(sizeof(char));
+					char *ptr;
+					for(int a = i; c != ' '; i++){
+						tempo = (char *) realloc(tempo, ((i-a) + 1) * sizeof(char));
+						tempo[i-a] = c;
+						c = linha[i+1];
+					}
+					evento.tempo = strtod(tempo, &ptr);
+					printf("%c - %f", evento.tipo, evento.tempo);
+					i--;
+				} else if(count == 2){
+					char *str = (char *) malloc(sizeof(char));
+					for(int a = i; c != ' '; i++){
+						str = (char *) realloc(str, ((i-a) + 1) * sizeof(char));
+						str[i-a] = c;
+						c = linha[i+1];
+					}
+					evento.qtdeItens = atoi(str);
+					printf(" %d", evento.qtdeItens);
+					i--;
+				} else if(count == 3){
+					evento.tipoCliente = linha[i] -'0';
+					printf(" %d", evento.tipoCliente);
+				} //ta dando erro
+				else if(count == 4){
+					char *str = (char *) malloc(sizeof(char));
+					for(int a = i; c != ' '; i++){
+						str = (char *) realloc(str, ((i-a) + 1) * sizeof(char));
+						str[i-a] = c;
+						c = linha[i+1];
+					}
+					evento.tempoPagamento = atoi(str);
+					printf(" %d", evento.tempoPagamento);
+					i--;
+				}
+			}else{
+				count++;
+			}
 		}
-		c = linha[a+1];
+	}else if(c == 'S'){
+		//Tipo tempo PDV duração_da_suspensão(minutos)
+		for(int i = 1; c != '\n'; i++){
+			c = linha[i];
+			if(c != ' '){
+				if(count == 1){
+					char *tempo = (char *) malloc(sizeof(char));
+					char *ptr;
+					for(int a = i; c != ' '; i++){
+						tempo = (char *) realloc(tempo, ((i-a) + 1) * sizeof(char));
+						tempo[i-a] = c;
+						c = linha[i+1];
+					}
+					evento.tempo = strtod(tempo, &ptr);
+					printf("%c - %f", evento.tipo, evento.tempo);
+					i--;
+				} else if(count == 2){
+					char *str = (char *) malloc(sizeof(char));
+					for(int a = i; c != ' '; i++){
+						str = (char *) realloc(str, ((i-a) + 1) * sizeof(char));
+						str[i-a] = c;
+						c = linha[i+1];
+					}
+					evento.PDV = atoi(str);
+					printf(" %d", evento.PDV);
+					i--;
+				} else if(count == 3){
+					char *str = (char *) malloc(sizeof(char));
+					for(int a = i; c != ' '; i++){
+						str = (char *) realloc(str, ((i-a) + 1) * sizeof(char));
+						str[i-a] = c;
+						c = linha[i+1];
+					}
+					evento.duracaoSuspensao = atoi(str);
+					printf(" %d", evento.duracaoSuspensao);
+					i--;
+				}
+			}else{
+				count++;
+			}
+		}
 	}
+	printf("\n--------------\n");
+	return evento;
 }
 
-void novos_PDVs_sistema(Setup_sistema *setup, char *linha){
-	setup->novos_PDVs = (int *) malloc(sizeof(int));
-	setup->novos_PDVs[0] = (int) linha[0];
-	setup->novos_PDVs_tamanho = 1;
+void PDVsInstaldos(Setup_sistema *setup, char *linha){
+	setup->PDVs = (int *) malloc(sizeof(int));
+	setup->PDVs[0] = linha[0] - '0';
+	setup->PDVsTamanho = 1;
 	char c = linha[1];
 	for(int i = 1; c != '\n'; i++){
 		if(c != ' '){
-			setup->novos_PDVs = (int *) realloc(setup->novos_PDVs, (i + 1) * sizeof(int));
-			setup->novos_PDVs[i] = (int) c;
-			setup->novos_PDVs_tamanho++;
+			setup->PDVs = (int *) realloc(setup->PDVs, (i + 1) * sizeof(int));
+			setup->PDVs[i] = c - '0';
+			setup->PDVsTamanho++;
+		}
+		c = linha[i+1];
+	}
+}
+
+void PDVsNovos(Setup_sistema *setup, char *linha){
+	char c = linha[0];
+	for(int i = 0; c != '\n'; i++){
+		if(c != ' '){
+			setup->PDVs = (int*) realloc(setup->PDVs, ((setup->PDVsTamanho+1) * sizeof(int)));
+			setup->PDVs[setup->PDVsTamanho] = c - '0';
+			setup->PDVsTamanho++;
 		}
 		c = linha[i+1];
 	}
@@ -93,6 +190,8 @@ void tempos_limites_sistema(Setup_sistema *setup, char *linha){
 int main(int argc, char const argv[]) {
 	Setup_sistema setup;
 	FILE *arq;
+	Evento *evento = (Evento*) malloc(sizeof(Evento));
+	int tamEvento = 0;
 	char Linha[100];
 	char *result;
 	int i;
@@ -105,22 +204,26 @@ int main(int argc, char const argv[]) {
 			result = fgets(Linha, 50, arq);
 			if (result){
 				if(i == 1){
-					PDV_instalado_sistema(&setup, Linha);
+					PDVsInstaldos(&setup, Linha);
 				} else if(i == 2){
-					novos_PDVs_sistema(&setup, Linha);
+					PDVsNovos(&setup, Linha);
+					printf("%s-> %d\n", Linha, setup.PDVs[setup.PDVsTamanho - 1]);
 				} else if(i == 3){
 					medida_de_agilidade_sistema(&setup, Linha);
 				} else if(i == 4){
 					tempos_limites_sistema(&setup, Linha);
 				}else{
 					char character = Linha[0];
-					while(character != 'F'){
-
+					if(character != 'F'){
+						evento = (Evento*) realloc(evento, (tamEvento + 1) * sizeof(Evento));
+						tamEvento++;
+						evento[tamEvento-1] = criar_evento(Linha);
 					}
 				}
 			}
 			i++;
 		}
+
 	fclose(arq);
 	}
 /*
