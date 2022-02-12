@@ -24,11 +24,11 @@ typedef struct {
 	int duracaoSuspensao;
 } Evento;
 
-typedef struct {
+typedef struct Ag{
 	double id;
 	int status;
 	Evento evento;
-	Agenda *nextAgenda;
+	struct Ag *nextAgenda;
 } Agenda;
 
 typedef struct {
@@ -43,18 +43,37 @@ Lista criar_lista(){
 	return lista;
 }
 
-void inserir_lista(Lista *lista, Agenda *agenda){
+void inserir_lista(Lista *lista, Agenda agenda){
 	lista->tamanho++;
 	Agenda *atual = lista->agenda;
+	Agenda *nova = (Agenda*) malloc(sizeof(Agenda));
+	nova->evento = agenda.evento;
+	nova->id = agenda.id;
+	nova->nextAgenda = agenda.nextAgenda;
+	nova->status = agenda.status;
 	if(atual == NULL){
-		lista->agenda = agenda;
+		lista->agenda = nova;
 	} else {
-		while(atual->id < agenda->id){
-			if(atual->nextAgenda == NULL) break;
+		while(atual->nextAgenda != NULL){
+			if(atual->nextAgenda->id > nova->id) break;
 			else atual = atual->nextAgenda;
 		}
-		agenda->nextAgenda = atual->nextAgenda;
-		atual->nextAgenda = agenda;
+		if(atual->nextAgenda == NULL){
+			atual->nextAgenda = nova;
+		} else{
+			nova->nextAgenda = atual->nextAgenda;
+			atual->nextAgenda = nova;
+		}
+	}
+	printf("+%f+\n", lista->agenda->id);
+}
+
+void imprimir_lista(Lista *lista){
+	Agenda *atual = lista->agenda;
+	printf("Lista: %d \n", lista->tamanho);
+	for(int i = 0; (i < lista->tamanho && atual != NULL); i++){
+		printf("agenda: %f\n", atual->id);
+		atual = atual->nextAgenda;
 	}
 }
 
@@ -92,7 +111,6 @@ Evento criar_evento(char *linha){
 						c = linha[i+1];
 					}
 					evento.tempo = strtod(tempo, &ptr);
-					printf("%c - %f", evento.tipo, evento.tempo);
 					i--;
 				} else if(count == 2){
 					char *str = (char *) malloc(sizeof(char));
@@ -102,21 +120,19 @@ Evento criar_evento(char *linha){
 						c = linha[i+1];
 					}
 					evento.qtdeItens = atoi(str);
-					printf(" %d", evento.qtdeItens);
 					i--;
 				} else if(count == 3){
 					evento.tipoCliente = linha[i] -'0';
-					printf(" %d", evento.tipoCliente);
 				} //ta dando erro
 				else if(count == 4){
 					char *str = (char *) malloc(sizeof(char));
-					for(int a = i; c != ' '; i++){
+					for(int a = i; c != '\n'; i++){
 						str = (char *) realloc(str, ((i-a) + 1) * sizeof(char));
 						str[i-a] = c;
 						c = linha[i+1];
 					}
 					evento.tempoPagamento = atoi(str);
-					printf(" %d", evento.tempoPagamento);
+					//printf(" %d", evento.tempoPagamento);
 					i--;
 				}
 			}else{
@@ -137,7 +153,6 @@ Evento criar_evento(char *linha){
 						c = linha[i+1];
 					}
 					evento.tempo = strtod(tempo, &ptr);
-					printf("%c - %f", evento.tipo, evento.tempo);
 					i--;
 				} else if(count == 2){
 					char *str = (char *) malloc(sizeof(char));
@@ -147,17 +162,16 @@ Evento criar_evento(char *linha){
 						c = linha[i+1];
 					}
 					evento.PDV = atoi(str);
-					printf(" %d", evento.PDV);
 					i--;
 				} else if(count == 3){
 					char *str = (char *) malloc(sizeof(char));
-					for(int a = i; c != ' '; i++){
+					for(int a = i; c != '\n'; i++){
 						str = (char *) realloc(str, ((i-a) + 1) * sizeof(char));
 						str[i-a] = c;
 						c = linha[i+1];
 					}
 					evento.duracaoSuspensao = atoi(str);
-					printf(" %d", evento.duracaoSuspensao);
+					//printf(" %d", evento.duracaoSuspensao);
 					i--;
 				}
 			}else{
@@ -165,7 +179,6 @@ Evento criar_evento(char *linha){
 			}
 		}
 	}
-	printf("\n--------------\n");
 	return evento;
 }
 
@@ -233,8 +246,6 @@ void tempos_limites_sistema(Setup_sistema *setup, char *linha){
 int main(int argc, char const argv[]) {
 	Setup_sistema setup;
 	FILE *arq;
-	Evento evento;
-	Agenda agenda;
 	Lista lista = criar_lista();
 	char Linha[100];
 	char *result;
@@ -258,14 +269,16 @@ int main(int argc, char const argv[]) {
 				}else{
 					char character = Linha[0];
 					if(character != 'F'){
-						evento = criar_evento(Linha);
-						agenda = criar_agenda(evento);
-						inserir_lista(&lista, &agenda);
+						Evento evento = criar_evento(Linha);
+						Agenda agenda = criar_agenda(evento);
+						if(agenda.nextAgenda != NULL) printf("%f", agenda.nextAgenda->id);
+						inserir_lista(&lista, agenda);
 					}
 				}
 			}
 			i++;
 		}
+		imprimir_lista(&lista);
 		/*
 		for(countEvento = 0; countEvento < tamEvento; countEvento++){
 			if(evento[countEvento].tipo == 'C'){
