@@ -6,6 +6,11 @@
 typedef struct {
 	int PDVsTamanho;
 	int *PDVs;
+	int *PDVsStatus;
+	/*
+		0 - livre
+		1 - ocupado
+	*/
 	int PDV_instalado_tamanho;
     int *PDV_instalado;
 	int novos_PDVs_tamanho;
@@ -16,6 +21,11 @@ typedef struct {
 
 typedef struct {
 	char tipo;
+	/*
+		C - chegada cliente
+		S - suspensao PDV
+		R - retorno suspensao
+	*/
 	double tempo;
 	int qtdeItens;
 	int tipoCliente;
@@ -26,7 +36,6 @@ typedef struct {
 
 typedef struct Ag{
 	double id;
-	int status;
 	Evento evento;
 	struct Ag *nextAgenda;
 } Agenda;
@@ -50,7 +59,6 @@ void inserir_lista(Lista *lista, Agenda agenda){
 	nova->evento = agenda.evento;
 	nova->id = agenda.id;
 	nova->nextAgenda = agenda.nextAgenda;
-	nova->status = agenda.status;
 	if(atual == NULL){
 		lista->agenda = nova;
 	} else {
@@ -65,14 +73,20 @@ void inserir_lista(Lista *lista, Agenda agenda){
 			atual->nextAgenda = nova;
 		}
 	}
-	printf("+%f+\n", lista->agenda->id);
+}
+
+Agenda remover_lista(Lista *lista){
+	Agenda *remover = lista->agenda;
+	lista->agenda = lista->agenda->nextAgenda; 
+	lista->tamanho--;
+	return *remover;
 }
 
 void imprimir_lista(Lista *lista){
 	Agenda *atual = lista->agenda;
 	printf("Lista: %d \n", lista->tamanho);
 	for(int i = 0; (i < lista->tamanho && atual != NULL); i++){
-		printf("agenda: %f\n", atual->id);
+		printf("agenda: %c - %f\n", atual->evento.tipo, atual->id);
 		atual = atual->nextAgenda;
 	}
 }
@@ -80,7 +94,6 @@ void imprimir_lista(Lista *lista){
 Agenda criar_agenda(Evento evento){
 	Agenda agenda;
 	agenda.id = evento.tempo;
-	agenda.status = 0;
 	agenda.evento = evento;
 	agenda.nextAgenda = NULL;
 	return agenda;
@@ -132,7 +145,6 @@ Evento criar_evento(char *linha){
 						c = linha[i+1];
 					}
 					evento.tempoPagamento = atoi(str);
-					//printf(" %d", evento.tempoPagamento);
 					i--;
 				}
 			}else{
@@ -171,7 +183,6 @@ Evento criar_evento(char *linha){
 						c = linha[i+1];
 					}
 					evento.duracaoSuspensao = atoi(str);
-					//printf(" %d", evento.duracaoSuspensao);
 					i--;
 				}
 			}else{
@@ -184,13 +195,17 @@ Evento criar_evento(char *linha){
 
 void PDVsInstaldos(Setup_sistema *setup, char *linha){
 	setup->PDVs = (int *) malloc(sizeof(int));
+	setup->PDVsStatus = (int *) malloc(sizeof(int));
 	setup->PDVs[0] = linha[0] - '0';
+	setup->PDVsStatus[0] = 0;
 	setup->PDVsTamanho = 1;
 	char c = linha[1];
 	for(int i = 1; c != '\n'; i++){
 		if(c != ' '){
 			setup->PDVs = (int *) realloc(setup->PDVs, (i + 1) * sizeof(int));
+			setup->PDVsStatus = (int *) realloc(setup->PDVsStatus, (i + 1) * sizeof(int));
 			setup->PDVs[i] = c - '0';
+			setup->PDVsStatus[i] = 0;
 			setup->PDVsTamanho++;
 		}
 		c = linha[i+1];
@@ -202,7 +217,9 @@ void PDVsNovos(Setup_sistema *setup, char *linha){
 	for(int i = 0; c != '\n'; i++){
 		if(c != ' '){
 			setup->PDVs = (int*) realloc(setup->PDVs, ((setup->PDVsTamanho+1) * sizeof(int)));
+			setup->PDVsStatus = (int*) realloc(setup->PDVsStatus, ((setup->PDVsTamanho+1) * sizeof(int)));
 			setup->PDVs[setup->PDVsTamanho] = c - '0';
+			setup->PDVsStatus[setup->PDVsTamanho] = 0;
 			setup->PDVsTamanho++;
 		}
 		c = linha[i+1];
@@ -233,16 +250,6 @@ void tempos_limites_sistema(Setup_sistema *setup, char *linha){
 	}
 }
 
-// Pontos de Venda (PDVs)
-// atende clientes segundo uma polı́tica Primeiro a Chegar é o Primeiro a ser Atendido (fila)
-// Os dados disponibilizados são estes:
-// O número de PDVs, atualmente instalados;
-// O fator de agilidade (FA) de cada operador(a) de caixa, variado entre [1,10]. Um FA igual a 1 indica máxima agilidade;
-
-// TAD AGENDA
-
-// TAD evento
-
 int main(int argc, char const argv[]) {
 	Setup_sistema setup;
 	FILE *arq;
@@ -271,81 +278,39 @@ int main(int argc, char const argv[]) {
 					if(character != 'F'){
 						Evento evento = criar_evento(Linha);
 						Agenda agenda = criar_agenda(evento);
-						if(agenda.nextAgenda != NULL) printf("%f", agenda.nextAgenda->id);
 						inserir_lista(&lista, agenda);
 					}
 				}
 			}
 			i++;
 		}
-		imprimir_lista(&lista);
-		/*
-		for(countEvento = 0; countEvento < tamEvento; countEvento++){
-			if(evento[countEvento].tipo == 'C'){
-				if(evento[countEvento].tipoCliente == 1){
-					//O tipo 1 vai esperar o tempo necessario para efetuar a compra.
-
-				}else if(evento[countEvento].tipoCliente == 2){
-					//O cliente do tipo 2 espera, no maximo, X minutos no Expresso (Fila + atendimento), e depois abandona as compras.
-				} else if(evento[countEvento].tipoCliente == 3){
-					//O cliente do tipo 3 vai esperar, no maximo, Y minutos na FILA, e, no maximo, Z minutos no atendimento, e depois abandona a compra
-				}
-			}
-		}
-		*/
+		//remover_lista(&lista);
+		//imprimir_lista(&lista);
 	fclose(arq);
 	}
-/*
-	// code
-	agenda = criarAgenda();
-	novo = lerDados(ent01.in);
-
-	evento = criarEvento(novo->tipo, novo->tempo, novo);
-	agendar(agenda, evento);
-
-	while (!vaziaAgenda(agenda)) {
-	evento = proximoevento(agenda);
-	relogio = evento->tempo;
-	if (evento->tipo == 'C'){
-	// acões relacionada ao evento chegada de cliente
-	// inserir na fila
-	cliente = evento->carga;
-	inserirNaFila(clientes, cliente);
-	if (tamanhoFila(clientes) == 1)&&(CAIXALIVRE(PDVs)){
-	evento = criarEvento('I', relogio, NULL);
-	agendar(agenda, evento);
+	for(int i = 0; i < lista.tamanho; i++){
+		if(lista.agenda->evento.tipo == 'C'){
+			int j;
+			for(j = 0; setup.PDVsStatus[j] != 0; j++);
+			setup.PDVsStatus[j] = 1;
+			Agenda agenda;
+			agenda.evento.tipo = 'R';
+			agenda.evento.tempo = lista.agenda->evento.tempo /* + o tempo que demorara */;
+			agenda.evento.PDV = j+1;
+			inserir_lista(&lista, agenda);
+			i--;
+		} else if(lista.agenda->evento.tipo == 'R'){
+			setup.PDVsStatus[lista.agenda->evento.PDV - 1] = 0;
+		} else if(lista.agenda->evento.tipo == 'S'){
+			setup.PDVsStatus[lista.agenda->evento.PDV - 1] = 1;
+			Agenda agenda;
+			agenda.evento.tipo = 'R';
+			agenda.evento.tempo = lista.agenda->evento.tempo + lista.agenda->evento.duracaoSuspensao;
+			agenda.evento.PDV = lista.agenda->evento.PDV;
+			inserir_lista(&lista, agenda);
+			i--;
+		}
+		remover_lista(&lista);
 	}
-	}else if(evento->tipo == 'S'){
-	// acões relacionadas ao evento suspensao de atendimento
-	pdv = evento->carga;
-	pdv->status = 'S';
-	// Precisa completar as ações de suspensão de ATENDIMENTO
-	// Agendar quando o caixa retoma o atendimento
-
-	}else if(evento->tipo == 'I'){
-	// descobrir o PDV ocioso (RR)
-	pdv=proximoPDV(PDV);
-	if (pdv!=NULL){
-	// retirar cliente;
-	cliente = desenfileirar(clientes)
-
-	///agendar o final do atendimento
-	tempo = relogio + passarCompras + pagamento;
-	evento=criarEvento('F', tempo, pdv);
-	agendar(agenda, evento);
-	}
-	}else if(evento->tipo == 'F'){ // final de atendimento
-	// evento de final de atendimento
-	/// cliente = desenfileirar(clientes)
-	pdv = evento->carga;
-	pdv->status = 'L';
-	if (!vazia(clientes)){
-	evento = criarEvento('I', relogio, NULL);
-	agendar(agenda, evento);
-	}
-	}
-	// code 
-	}
-*/
 	return 0;
 } 
