@@ -24,6 +24,49 @@ typedef struct {
 	int duracaoSuspensao;
 } Evento;
 
+typedef struct {
+	double id;
+	int status;
+	Evento evento;
+	Agenda *nextAgenda;
+} Agenda;
+
+typedef struct {
+	int tamanho;
+	Agenda *agenda;
+} Lista;
+
+Lista criar_lista(){
+	Lista lista;
+	lista.tamanho = 0;
+	lista.agenda = NULL;
+	return lista;
+}
+
+void inserir_lista(Lista *lista, Agenda *agenda){
+	lista->tamanho++;
+	Agenda *atual = lista->agenda;
+	if(atual == NULL){
+		lista->agenda = agenda;
+	} else {
+		while(atual->id < agenda->id){
+			if(atual->nextAgenda == NULL) break;
+			else atual = atual->nextAgenda;
+		}
+		agenda->nextAgenda = atual->nextAgenda;
+		atual->nextAgenda = agenda;
+	}
+}
+
+Agenda criar_agenda(Evento evento){
+	Agenda agenda;
+	agenda.id = evento.tempo;
+	agenda.status = 0;
+	agenda.evento = evento;
+	agenda.nextAgenda = NULL;
+	return agenda;
+}
+
 Evento criar_evento(char *linha){
 	Evento evento;
 	char c = linha[0];
@@ -190,8 +233,9 @@ void tempos_limites_sistema(Setup_sistema *setup, char *linha){
 int main(int argc, char const argv[]) {
 	Setup_sistema setup;
 	FILE *arq;
-	Evento *evento = (Evento*) malloc(sizeof(Evento));
-	int tamEvento = 0;
+	Evento evento;
+	Agenda agenda;
+	Lista lista = criar_lista();
 	char Linha[100];
 	char *result;
 	int i;
@@ -207,7 +251,6 @@ int main(int argc, char const argv[]) {
 					PDVsInstaldos(&setup, Linha);
 				} else if(i == 2){
 					PDVsNovos(&setup, Linha);
-					printf("%s-> %d\n", Linha, setup.PDVs[setup.PDVsTamanho - 1]);
 				} else if(i == 3){
 					medida_de_agilidade_sistema(&setup, Linha);
 				} else if(i == 4){
@@ -215,15 +258,28 @@ int main(int argc, char const argv[]) {
 				}else{
 					char character = Linha[0];
 					if(character != 'F'){
-						evento = (Evento*) realloc(evento, (tamEvento + 1) * sizeof(Evento));
-						tamEvento++;
-						evento[tamEvento-1] = criar_evento(Linha);
+						evento = criar_evento(Linha);
+						agenda = criar_agenda(evento);
+						inserir_lista(&lista, &agenda);
 					}
 				}
 			}
 			i++;
 		}
+		/*
+		for(countEvento = 0; countEvento < tamEvento; countEvento++){
+			if(evento[countEvento].tipo == 'C'){
+				if(evento[countEvento].tipoCliente == 1){
+					//O tipo 1 vai esperar o tempo necessario para efetuar a compra.
 
+				}else if(evento[countEvento].tipoCliente == 2){
+					//O cliente do tipo 2 espera, no maximo, X minutos no Expresso (Fila + atendimento), e depois abandona as compras.
+				} else if(evento[countEvento].tipoCliente == 3){
+					//O cliente do tipo 3 vai esperar, no maximo, Y minutos na FILA, e, no maximo, Z minutos no atendimento, e depois abandona a compra
+				}
+			}
+		}
+		*/
 	fclose(arq);
 	}
 /*
