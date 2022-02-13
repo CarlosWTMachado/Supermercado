@@ -7,17 +7,17 @@ typedef struct {
 	int PDVsTamanho;
 	int *PDVs;
 	int *PDVsStatus;
-	/*
-		0 - livre
-		1 - ocupado
-	*/
-	int PDV_instalado_tamanho;
-    int *PDV_instalado;
-	int novos_PDVs_tamanho;
-	int *novos_PDVs;
+	int **PDVsTemposAtendimento; // 0 - livre; 1 - ocupado
 	int medida_de_agilidade;
 	int tempos_limites[3];
 } Setup_sistema;
+
+typedef struct {
+	int tipo;
+	double tempo;
+	int tMax;
+	int tTotal;
+} Desistencia;
 
 typedef struct {
 	char tipo;
@@ -89,6 +89,7 @@ void imprimir_lista(Lista *lista){
 		printf("agenda: %c - %f\n", atual->evento.tipo, atual->id);
 		atual = atual->nextAgenda;
 	}
+	printf("-+-+-+-+-+-");
 }
 
 Agenda criar_agenda(Evento evento){
@@ -193,20 +194,29 @@ Evento criar_evento(char *linha){
 	return evento;
 }
 
-void PDVsInstaldos(Setup_sistema *setup, char *linha){
+void PDVsInstalados(Setup_sistema *setup, char *linha){
 	setup->PDVs = (int *) malloc(sizeof(int));
 	setup->PDVsStatus = (int *) malloc(sizeof(int));
+	setup->PDVsTemposAtendimento = (int **) malloc(sizeof(int*));
 	setup->PDVs[0] = linha[0] - '0';
 	setup->PDVsStatus[0] = 0;
+	setup->PDVsTemposAtendimento[0] = (int *) malloc(sizeof(int));
+	setup->PDVsTemposAtendimento[0][0] = 0;
 	setup->PDVsTamanho = 1;
 	char c = linha[1];
+	int j = 1;
 	for(int i = 1; c != '\n'; i++){
 		if(c != ' '){
-			setup->PDVs = (int *) realloc(setup->PDVs, (i + 1) * sizeof(int));
-			setup->PDVsStatus = (int *) realloc(setup->PDVsStatus, (i + 1) * sizeof(int));
-			setup->PDVs[i] = c - '0';
-			setup->PDVsStatus[i] = 0;
+			setup->PDVs = (int *) realloc(setup->PDVs, (j+1) * sizeof(int));
+			setup->PDVs[j] = c - '0';
+			setup->PDVsStatus = (int *) realloc(setup->PDVsStatus, (j+1) * sizeof(int));
+			setup->PDVsStatus[j] = 0;
+			setup->PDVsTemposAtendimento = (int **) realloc(setup->PDVsTemposAtendimento, (j+1) * sizeof(int*));
+			setup->PDVsTemposAtendimento[j] = (int *) malloc(sizeof(int));
+			setup->PDVsTemposAtendimento[j][0] = 0;
+			printf("/*/* %d %d */*/", j, setup->PDVsTemposAtendimento[j][0]);
 			setup->PDVsTamanho++;
+			j++;
 		}
 		c = linha[i+1];
 	}
@@ -217,9 +227,12 @@ void PDVsNovos(Setup_sistema *setup, char *linha){
 	for(int i = 0; c != '\n'; i++){
 		if(c != ' '){
 			setup->PDVs = (int*) realloc(setup->PDVs, ((setup->PDVsTamanho+1) * sizeof(int)));
-			setup->PDVsStatus = (int*) realloc(setup->PDVsStatus, ((setup->PDVsTamanho+1) * sizeof(int)));
 			setup->PDVs[setup->PDVsTamanho] = c - '0';
+			setup->PDVsStatus = (int*) realloc(setup->PDVsStatus, ((setup->PDVsTamanho+1) * sizeof(int)));
 			setup->PDVsStatus[setup->PDVsTamanho] = 0;
+			setup->PDVsTemposAtendimento = (int **) realloc(setup->PDVsTemposAtendimento, ((setup->PDVsTamanho+1) * sizeof(int*)));
+			setup->PDVsTemposAtendimento[setup->PDVsTamanho] = (int *) malloc(sizeof(int));
+			setup->PDVsTemposAtendimento[setup->PDVsTamanho][0] = 0;
 			setup->PDVsTamanho++;
 		}
 		c = linha[i+1];
@@ -250,6 +263,64 @@ void tempos_limites_sistema(Setup_sistema *setup, char *linha){
 	}
 }
 
+typedef struct {
+	int tipo;
+	double tempo;
+	int tMax;
+	int tTotal;
+} Desistencia;
+
+Desistencia criar_desistencia(int tipo, double tempo, int tMax, int tTotal){
+	Desistencia desistencia;
+	desistencia.tipo = tipo;
+	desistencia.tempo = tempo;
+	desistencia.tMax = tMax;
+	desistencia.tTotal = tTotal;
+	return desistencia;
+}
+
+int tempo_atendimento(Setup_sistema *setup, Evento evento, int tempoFila, Desistencia *desistencias, int *desistenciasTam){
+	int atendimento = (setup->medida_de_agilidade * setup->PDVs[evento.PDV-1] * evento.qtdeItens) + 
+	(setup->medida_de_agilidade * setup->PDVs[evento.PDV-1] * evento.qtdeItens);
+	if(evento.tipoCliente == 1){
+		setup->PDVsTemposAtendimento[evento.PDV-1][0]++;
+		setup->PDVsTemposAtendimento[evento.PDV-1] = realloc(setup->PDVsTemposAtendimento[evento.PDV-1], (setup->PDVsTemposAtendimento[evento.PDV-1][0] + 1) * sizeof(int));
+		setup->PDVsTemposAtendimento[evento.PDV-1][setup->PDVsTemposAtendimento[evento.PDV-1][0]] = atendimento + tempoFila;
+		return 1;
+	}else if(evento.tipoCliente == 2){ //tipo 2 espera, no maximo, X minutos no Expresso (Fila + atendimento), e depois abandona as compras.
+		if(atendimento + tempoFila > (setup->tempos_limites[0] * 60000)){
+			*desistenciasTam++;
+			desistencias = (Desistencia*) realloc(desistencias, (*desistenciasTam) * sizeof(Desistencia));
+			desistencias[*desistenciasTam-1] = criar_desistencia(evento.tipoCliente, evento.tempo, (setup->tempos_limites[0] * 60000), atendimento + tempoFila);
+			return 0;
+		}else{
+			setup->PDVsTemposAtendimento[evento.PDV-1][0]++;
+			setup->PDVsTemposAtendimento[evento.PDV-1] = realloc(setup->PDVsTemposAtendimento[evento.PDV-1], (setup->PDVsTemposAtendimento[evento.PDV-1][0] + 1) * sizeof(int));
+			setup->PDVsTemposAtendimento[evento.PDV-1][setup->PDVsTemposAtendimento[evento.PDV-1][0]] = atendimento + tempoFila;
+			return 1;
+		}
+	}else if(evento.tipoCliente == 3){ //tipo 3 vai esperar, no maximo, Y minutos na FILA, e, no maximo, Z minutos no atendimento, e depois abandona a compra
+		if(tempoFila <= (setup->tempos_limites[1] * 60000) && atendimento <= (setup->tempos_limites[2] * 60000)){
+			setup->PDVsTemposAtendimento[evento.PDV-1][0]++;
+			setup->PDVsTemposAtendimento[evento.PDV-1] = realloc(setup->PDVsTemposAtendimento[evento.PDV-1], (setup->PDVsTemposAtendimento[evento.PDV-1][0] + 1) * sizeof(int));
+			setup->PDVsTemposAtendimento[evento.PDV-1][setup->PDVsTemposAtendimento[evento.PDV-1][0]] = atendimento + tempoFila;
+			return 1;
+		}else return 0;
+	}
+	return 0;
+}
+
+int findDestroy(Lista *lista, int pdv, char tipo){
+	Agenda *atual = lista->agenda;
+	for(int i = 0; i < lista->tamanho-1;i++){
+		if(atual->nextAgenda->evento.PDV == pdv && atual->nextAgenda->evento.tipo == tipo){
+			atual->nextAgenda = atual->nextAgenda->nextAgenda;
+			return 1;
+		}
+	}
+	return 0;
+}
+
 int main(int argc, char const argv[]) {
 	Setup_sistema setup;
 	FILE *arq;
@@ -257,7 +328,8 @@ int main(int argc, char const argv[]) {
 	char Linha[100];
 	char *result;
 	int i;
-
+	Desistencia *desistencias = (Desistencia*) malloc(sizeof(Desistencia));
+	int desistenciasTam = 0;
 	arq = fopen("ent01.in", "rt");
 
 	if (arq != NULL) {
@@ -266,7 +338,7 @@ int main(int argc, char const argv[]) {
 			result = fgets(Linha, 50, arq);
 			if (result){
 				if(i == 1){
-					PDVsInstaldos(&setup, Linha);
+					PDVsInstalados(&setup, Linha);
 				} else if(i == 2){
 					PDVsNovos(&setup, Linha);
 				} else if(i == 3){
@@ -284,33 +356,43 @@ int main(int argc, char const argv[]) {
 			}
 			i++;
 		}
-		//remover_lista(&lista);
-		//imprimir_lista(&lista);
 	fclose(arq);
 	}
 	for(int i = 0; i < lista.tamanho; i++){
 		if(lista.agenda->evento.tipo == 'C'){
 			int j;
 			for(j = 0; setup.PDVsStatus[j] != 0; j++);
-			setup.PDVsStatus[j] = 1;
-			Agenda agenda;
-			agenda.evento.tipo = 'R';
-			agenda.evento.tempo = lista.agenda->evento.tempo /* + o tempo que demorara */;
-			agenda.evento.PDV = j+1;
-			inserir_lista(&lista, agenda);
-			i--;
+			if(j == setup.PDVsTamanho){
+
+			}else{
+				setup.PDVsStatus[j] = 1;
+				lista.agenda->evento.PDV = j+1;
+				Evento evento;
+				evento.tipo = 'R';
+				evento.tempo = lista.agenda->evento.tempo /* + o tempo que demorara */;
+				evento.PDV = j+1;
+				Agenda agenda = criar_agenda(evento);
+				if(lista.agenda->evento.tipoCliente == 1){
+					tempo_atendimento(&setup, lista.agenda->evento, 0, &desistencias, &desistenciasTam);
+				}
+				inserir_lista(&lista, agenda);
+				i--;
+			}
 		} else if(lista.agenda->evento.tipo == 'R'){
 			setup.PDVsStatus[lista.agenda->evento.PDV - 1] = 0;
 		} else if(lista.agenda->evento.tipo == 'S'){
+			if(setup.PDVsStatus[lista.agenda->evento.PDV - 1] == 1) findDestroy(&lista, lista.agenda->evento.PDV, 'R');
 			setup.PDVsStatus[lista.agenda->evento.PDV - 1] = 1;
-			Agenda agenda;
-			agenda.evento.tipo = 'R';
-			agenda.evento.tempo = lista.agenda->evento.tempo + lista.agenda->evento.duracaoSuspensao;
-			agenda.evento.PDV = lista.agenda->evento.PDV;
+			Evento evento;
+			evento.tipo = 'R';
+			evento.tempo = lista.agenda->evento.tempo + (lista.agenda->evento.duracaoSuspensao * 60);
+			evento.PDV = lista.agenda->evento.PDV;
+			Agenda agenda = criar_agenda(evento);
 			inserir_lista(&lista, agenda);
 			i--;
 		}
 		remover_lista(&lista);
+		imprimir_lista(&lista);
 	}
 	return 0;
 } 
