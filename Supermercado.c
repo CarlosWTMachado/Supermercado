@@ -8,7 +8,7 @@ typedef struct {
 	int *PDVs;
 	int *PDVsStatus;
 	int **PDVsTemposAtendimento; // 0 - livre; 1 - ocupado
-	int medida_de_agilidade;
+	int medida_de_agilidade; // em milisegundos
 	int tempos_limites[3];
 } Setup_sistema;
 
@@ -32,6 +32,7 @@ typedef struct {
 	int tempoPagamento;
 	int PDV;
 	int duracaoSuspensao;
+	double tempoFila;
 } Evento;
 
 typedef struct Ag{
@@ -63,7 +64,7 @@ void inserir_lista(Lista *lista, Agenda agenda){
 		lista->agenda = nova;
 	} else {
 		while(atual->nextAgenda != NULL){
-			if(atual->nextAgenda->id > nova->id) break;
+			if(atual->nextAgenda->id > nova->id){break;}
 			else atual = atual->nextAgenda;
 		}
 		if(atual->nextAgenda == NULL){
@@ -111,8 +112,9 @@ Evento criar_evento(char *linha){
 	evento.tempoPagamento = 0;
 	evento.PDV = 0;
 	evento.duracaoSuspensao = 0;
+	evento.tempoFila = 0;
 	if(c == 'C'){
-		//Tipo Tempo qtdeItens tipoCliente tempoPagamento(ms)
+		//Tipo Tempo(s) qtdeItens tipoCliente tempoPagamento(ms)
 		for(int i = 1; c != '\n'; i++){
 			c = linha[i];
 			if(c != ' '){
@@ -137,8 +139,7 @@ Evento criar_evento(char *linha){
 					i--;
 				} else if(count == 3){
 					evento.tipoCliente = linha[i] -'0';
-				} //ta dando erro
-				else if(count == 4){
+				} else if(count == 4){
 					char *str = (char *) malloc(sizeof(char));
 					for(int a = i; c != '\n'; i++){
 						str = (char *) realloc(str, ((i-a) + 1) * sizeof(char));
@@ -153,7 +154,7 @@ Evento criar_evento(char *linha){
 			}
 		}
 	}else if(c == 'S'){
-		//Tipo tempo PDV duração_da_suspensão(minutos)
+		//Tipo tempo(s) PDV duração_da_suspensão(minutos)
 		for(int i = 1; c != '\n'; i++){
 			c = linha[i];
 			if(c != ' '){
@@ -214,7 +215,6 @@ void PDVsInstalados(Setup_sistema *setup, char *linha){
 			setup->PDVsTemposAtendimento = (int **) realloc(setup->PDVsTemposAtendimento, (j+1) * sizeof(int*));
 			setup->PDVsTemposAtendimento[j] = (int *) malloc(sizeof(int));
 			setup->PDVsTemposAtendimento[j][0] = 0;
-			printf("/*/* %d %d */*/", j, setup->PDVsTemposAtendimento[j][0]);
 			setup->PDVsTamanho++;
 			j++;
 		}
@@ -263,13 +263,6 @@ void tempos_limites_sistema(Setup_sistema *setup, char *linha){
 	}
 }
 
-typedef struct {
-	int tipo;
-	double tempo;
-	int tMax;
-	int tTotal;
-} Desistencia;
-
 Desistencia criar_desistencia(int tipo, double tempo, int tMax, int tTotal){
 	Desistencia desistencia;
 	desistencia.tipo = tipo;
@@ -279,33 +272,38 @@ Desistencia criar_desistencia(int tipo, double tempo, int tMax, int tTotal){
 	return desistencia;
 }
 
-int tempo_atendimento(Setup_sistema *setup, Evento evento, int tempoFila, Desistencia *desistencias, int *desistenciasTam){
-	int atendimento = (setup->medida_de_agilidade * setup->PDVs[evento.PDV-1] * evento.qtdeItens) + 
-	(setup->medida_de_agilidade * setup->PDVs[evento.PDV-1] * evento.qtdeItens);
+int tempo_atendimento(Setup_sistema *setup, Evento evento, Desistencia *desistencias, int *desistenciasTam){
+	int atendimento = (setup->medida_de_agilidade * setup->PDVs[evento.PDV-1] * evento.qtdeItens) +  evento.tempoPagamento;
 	if(evento.tipoCliente == 1){
 		setup->PDVsTemposAtendimento[evento.PDV-1][0]++;
 		setup->PDVsTemposAtendimento[evento.PDV-1] = realloc(setup->PDVsTemposAtendimento[evento.PDV-1], (setup->PDVsTemposAtendimento[evento.PDV-1][0] + 1) * sizeof(int));
-		setup->PDVsTemposAtendimento[evento.PDV-1][setup->PDVsTemposAtendimento[evento.PDV-1][0]] = atendimento + tempoFila;
-		return 1;
+		setup->PDVsTemposAtendimento[evento.PDV-1][setup->PDVsTemposAtendimento[evento.PDV-1][0]] = atendimento + evento.tempoFila;
+		return setup->PDVsTemposAtendimento[evento.PDV-1][setup->PDVsTemposAtendimento[evento.PDV-1][0]];
 	}else if(evento.tipoCliente == 2){ //tipo 2 espera, no maximo, X minutos no Expresso (Fila + atendimento), e depois abandona as compras.
-		if(atendimento + tempoFila > (setup->tempos_limites[0] * 60000)){
+		if(atendimento + evento.tempoFila > (setup->tempos_limites[0] * 60000)){
 			*desistenciasTam++;
 			desistencias = (Desistencia*) realloc(desistencias, (*desistenciasTam) * sizeof(Desistencia));
-			desistencias[*desistenciasTam-1] = criar_desistencia(evento.tipoCliente, evento.tempo, (setup->tempos_limites[0] * 60000), atendimento + tempoFila);
+			desistencias[*desistenciasTam-1] = criar_desistencia(evento.tipoCliente, evento.tempo, (setup->tempos_limites[0] * 60000), atendimento + evento.tempoFila);
 			return 0;
 		}else{
 			setup->PDVsTemposAtendimento[evento.PDV-1][0]++;
 			setup->PDVsTemposAtendimento[evento.PDV-1] = realloc(setup->PDVsTemposAtendimento[evento.PDV-1], (setup->PDVsTemposAtendimento[evento.PDV-1][0] + 1) * sizeof(int));
-			setup->PDVsTemposAtendimento[evento.PDV-1][setup->PDVsTemposAtendimento[evento.PDV-1][0]] = atendimento + tempoFila;
-			return 1;
+			setup->PDVsTemposAtendimento[evento.PDV-1][setup->PDVsTemposAtendimento[evento.PDV-1][0]] = atendimento + evento.tempoFila;
+			return setup->PDVsTemposAtendimento[evento.PDV-1][setup->PDVsTemposAtendimento[evento.PDV-1][0]];
 		}
 	}else if(evento.tipoCliente == 3){ //tipo 3 vai esperar, no maximo, Y minutos na FILA, e, no maximo, Z minutos no atendimento, e depois abandona a compra
-		if(tempoFila <= (setup->tempos_limites[1] * 60000) && atendimento <= (setup->tempos_limites[2] * 60000)){
+		if(evento.tempoFila <= (setup->tempos_limites[1] * 60000) && atendimento <= (setup->tempos_limites[2] * 60000)){
 			setup->PDVsTemposAtendimento[evento.PDV-1][0]++;
-			setup->PDVsTemposAtendimento[evento.PDV-1] = realloc(setup->PDVsTemposAtendimento[evento.PDV-1], (setup->PDVsTemposAtendimento[evento.PDV-1][0] + 1) * sizeof(int));
-			setup->PDVsTemposAtendimento[evento.PDV-1][setup->PDVsTemposAtendimento[evento.PDV-1][0]] = atendimento + tempoFila;
-			return 1;
-		}else return 0;
+			setup->PDVsTemposAtendimento[evento.PDV-1] = 
+				realloc(setup->PDVsTemposAtendimento[evento.PDV-1], (setup->PDVsTemposAtendimento[evento.PDV-1][0] + 1) * sizeof(int));
+			setup->PDVsTemposAtendimento[evento.PDV-1][setup->PDVsTemposAtendimento[evento.PDV-1][0]] = atendimento + evento.tempoFila;
+			return setup->PDVsTemposAtendimento[evento.PDV-1][setup->PDVsTemposAtendimento[evento.PDV-1][0]];
+		}else{
+			*desistenciasTam++;
+			desistencias = (Desistencia*) realloc(desistencias, (*desistenciasTam) * sizeof(Desistencia));
+			desistencias[*desistenciasTam-1] = criar_desistencia(evento.tipoCliente, evento.tempo, (setup->tempos_limites[0] * 60000), atendimento + evento.tempoFila);
+			return 0;
+		}
 	}
 	return 0;
 }
@@ -321,6 +319,24 @@ int findDestroy(Lista *lista, int pdv, char tipo){
 	return 0;
 }
 
+double calcularTempo(Lista *lista, char c, double tempo){
+	Agenda *agenda;
+	agenda = lista->agenda;
+	while (agenda != NULL && agenda->evento.tipo != 'R') {
+		agenda = agenda->nextAgenda;
+	}
+	return agenda->evento.tempo - tempo;
+}
+
+double findFirst(Lista *lista, char c){
+	Agenda *agenda;
+	agenda = lista->agenda;
+	while (agenda != NULL && agenda->evento.tipo != 'R') {
+		agenda = agenda->nextAgenda;
+	}
+	return agenda->evento.tempo;
+}
+
 int main(int argc, char const argv[]) {
 	Setup_sistema setup;
 	FILE *arq;
@@ -331,7 +347,6 @@ int main(int argc, char const argv[]) {
 	Desistencia *desistencias = (Desistencia*) malloc(sizeof(Desistencia));
 	int desistenciasTam = 0;
 	arq = fopen("ent01.in", "rt");
-
 	if (arq != NULL) {
 		i = 1;
 		while (!feof(arq)) {
@@ -358,25 +373,33 @@ int main(int argc, char const argv[]) {
 		}
 	fclose(arq);
 	}
-	for(int i = 0; i < lista.tamanho; i++){
+	while (lista.tamanho > 0){
 		if(lista.agenda->evento.tipo == 'C'){
 			int j;
-			for(j = 0; setup.PDVsStatus[j] != 0; j++);
+			int tempoFila = 0;
+			int tempoAtendimento = 0;
+			for(j = 0; (j < setup.PDVsTamanho && setup.PDVsStatus[j] != 0); j++);
 			if(j == setup.PDVsTamanho){
-
-			}else{
-				setup.PDVsStatus[j] = 1;
-				lista.agenda->evento.PDV = j+1;
-				Evento evento;
-				evento.tipo = 'R';
-				evento.tempo = lista.agenda->evento.tempo /* + o tempo que demorara */;
-				evento.PDV = j+1;
-				Agenda agenda = criar_agenda(evento);
-				if(lista.agenda->evento.tipoCliente == 1){
-					tempo_atendimento(&setup, lista.agenda->evento, 0, &desistencias, &desistenciasTam);
+				double newTempo = calcularTempo(&lista, 'R', lista.agenda->evento.tempo);
+				if(newTempo != 0){
+					Agenda agenda = *lista.agenda;
+					agenda.evento.tempoFila = newTempo;
+					agenda.evento.tempo = findFirst(&lista, 'R');
+					inserir_lista(&lista, agenda);
 				}
-				inserir_lista(&lista, agenda);
-				i--;
+			}else{
+				lista.agenda->evento.PDV = j+1;
+				lista.agenda->evento.tempoFila = 0;
+				tempoAtendimento = tempo_atendimento(&setup, lista.agenda->evento, desistencias, &desistenciasTam);
+				if(tempoAtendimento != 0){
+					setup.PDVsStatus[j] = 1;
+					Evento evento;
+					evento.tipo = 'R';
+					evento.tempo = lista.agenda->evento.tempo + (tempoAtendimento / 1000);
+					evento.PDV = j+1;
+					Agenda agenda = criar_agenda(evento);
+					inserir_lista(&lista, agenda);
+				}
 			}
 		} else if(lista.agenda->evento.tipo == 'R'){
 			setup.PDVsStatus[lista.agenda->evento.PDV - 1] = 0;
@@ -389,10 +412,12 @@ int main(int argc, char const argv[]) {
 			evento.PDV = lista.agenda->evento.PDV;
 			Agenda agenda = criar_agenda(evento);
 			inserir_lista(&lista, agenda);
-			i--;
 		}
 		remover_lista(&lista);
 		imprimir_lista(&lista);
 	}
+	//for(int i = 0; i < desistenciasTam; i++){
+		printf("\n* %d -> %d - %f - %d - %d *", desistenciasTam, desistencias[0].tipo, desistencias[0].tempo, desistencias[0].tMax, desistencias[0].tTotal);
+	//}
 	return 0;
 } 
