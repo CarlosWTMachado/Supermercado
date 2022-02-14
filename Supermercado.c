@@ -80,6 +80,7 @@ Agenda remover_lista(Lista *lista){
 	Agenda *remover = lista->agenda;
 	lista->agenda = lista->agenda->nextAgenda; 
 	lista->tamanho--;
+	free(remover);
 	return *remover;
 }
 
@@ -284,6 +285,7 @@ int tempo_atendimento(Setup_sistema *setup, Evento evento, Desistencia *desisten
 			*desistenciasTam++;
 			desistencias = (Desistencia*) realloc(desistencias, (*desistenciasTam) * sizeof(Desistencia));
 			desistencias[*desistenciasTam-1] = criar_desistencia(evento.tipoCliente, evento.tempo, (setup->tempos_limites[0] * 60000), atendimento + evento.tempoFila);
+			printf("\n\nXXX\n\n");
 			return 0;
 		}else{
 			setup->PDVsTemposAtendimento[evento.PDV-1][0]++;
@@ -302,6 +304,7 @@ int tempo_atendimento(Setup_sistema *setup, Evento evento, Desistencia *desisten
 			*desistenciasTam++;
 			desistencias = (Desistencia*) realloc(desistencias, (*desistenciasTam) * sizeof(Desistencia));
 			desistencias[*desistenciasTam-1] = criar_desistencia(evento.tipoCliente, evento.tempo, (setup->tempos_limites[0] * 60000), atendimento + evento.tempoFila);
+			printf("\n\nXXX\n\n");
 			return 0;
 		}
 	}
@@ -310,12 +313,19 @@ int tempo_atendimento(Setup_sistema *setup, Evento evento, Desistencia *desisten
 
 int findDestroy(Lista *lista, int pdv, char tipo){
 	Agenda *atual = lista->agenda;
+	Agenda *remover;
 	for(int i = 0; i < lista->tamanho-1;i++){
 		if(atual->nextAgenda->evento.PDV == pdv && atual->nextAgenda->evento.tipo == tipo){
+			lista->tamanho--;
+			remover = atual->nextAgenda;
 			atual->nextAgenda = atual->nextAgenda->nextAgenda;
+			printf("\n\n%c - %f\n\n", remover->evento.tipo, remover->id);
+			free(remover);
 			return 1;
 		}
+		atual = atual->nextAgenda;
 	}
+	printf("\n\n%d......%c\n\n", lista->tamanho, tipo);
 	return 0;
 }
 
@@ -371,53 +381,91 @@ int main(int argc, char const argv[]) {
 			}
 			i++;
 		}
-	fclose(arq);
-	}
-	while (lista.tamanho > 0){
-		if(lista.agenda->evento.tipo == 'C'){
-			int j;
-			int tempoFila = 0;
-			int tempoAtendimento = 0;
-			for(j = 0; (j < setup.PDVsTamanho && setup.PDVsStatus[j] != 0); j++);
-			if(j == setup.PDVsTamanho){
-				double newTempo = calcularTempo(&lista, 'R', lista.agenda->evento.tempo);
-				if(newTempo != 0){
-					Agenda agenda = *lista.agenda;
-					agenda.evento.tempoFila = newTempo;
-					agenda.evento.tempo = findFirst(&lista, 'R');
-					inserir_lista(&lista, agenda);
+		while (lista.tamanho > 0){
+			if(lista.agenda->evento.tipo == 'C'){
+				int j;
+				int tempoAtendimento = 0;
+				for(j = 0; (j < setup.PDVsTamanho && setup.PDVsStatus[j] != 0); j++);
+				if(j == setup.PDVsTamanho){
+					double newTempo = calcularTempo(&lista, 'R', lista.agenda->evento.tempo);
+					if(newTempo != 0){
+						for(int a = 0; a < setup.PDVsTamanho; a++){printf(" %d ", setup.PDVsStatus[a]);}
+						Agenda agenda = *lista.agenda;
+						agenda.id = findFirst(&lista, 'R');
+						agenda.evento.tempoFila = newTempo;
+						agenda.evento.tempo = agenda.id;
+						inserir_lista(&lista, agenda);
+					}
+				}else{
+					lista.agenda->evento.PDV = j+1;
+					tempoAtendimento = tempo_atendimento(&setup, lista.agenda->evento, desistencias, &desistenciasTam);
+					if(tempoAtendimento != 0){
+						setup.PDVsStatus[j] = 1;
+						Evento evento;
+						evento.tipo = 'R';
+						evento.tempo = lista.agenda->evento.tempo + (tempoAtendimento / 1000);
+						evento.PDV = j+1;
+						Agenda agenda = criar_agenda(evento);
+						inserir_lista(&lista, agenda);
+					}
 				}
-			}else{
-				lista.agenda->evento.PDV = j+1;
-				lista.agenda->evento.tempoFila = 0;
-				tempoAtendimento = tempo_atendimento(&setup, lista.agenda->evento, desistencias, &desistenciasTam);
-				if(tempoAtendimento != 0){
-					setup.PDVsStatus[j] = 1;
-					Evento evento;
-					evento.tipo = 'R';
-					evento.tempo = lista.agenda->evento.tempo + (tempoAtendimento / 1000);
-					evento.PDV = j+1;
-					Agenda agenda = criar_agenda(evento);
-					inserir_lista(&lista, agenda);
-				}
+			} else if(lista.agenda->evento.tipo == 'R'){
+				setup.PDVsStatus[lista.agenda->evento.PDV - 1] = 0;
+			} else if(lista.agenda->evento.tipo == 'S'){
+				if(setup.PDVsStatus[lista.agenda->evento.PDV - 1] == 1){printf("\n\nZZZ\n\n"); findDestroy(&lista, lista.agenda->evento.PDV, 'R');}
+				setup.PDVsStatus[lista.agenda->evento.PDV - 1] = 1;
+				Evento evento;
+				evento.tipo = 'R';
+				evento.tempo = lista.agenda->evento.tempo + (lista.agenda->evento.duracaoSuspensao * 60);
+				evento.PDV = lista.agenda->evento.PDV;
+				Agenda agenda = criar_agenda(evento);
+				inserir_lista(&lista, agenda);
 			}
-		} else if(lista.agenda->evento.tipo == 'R'){
-			setup.PDVsStatus[lista.agenda->evento.PDV - 1] = 0;
-		} else if(lista.agenda->evento.tipo == 'S'){
-			if(setup.PDVsStatus[lista.agenda->evento.PDV - 1] == 1) findDestroy(&lista, lista.agenda->evento.PDV, 'R');
-			setup.PDVsStatus[lista.agenda->evento.PDV - 1] = 1;
-			Evento evento;
-			evento.tipo = 'R';
-			evento.tempo = lista.agenda->evento.tempo + (lista.agenda->evento.duracaoSuspensao * 60);
-			evento.PDV = lista.agenda->evento.PDV;
-			Agenda agenda = criar_agenda(evento);
-			inserir_lista(&lista, agenda);
+			remover_lista(&lista);
+			imprimir_lista(&lista);
 		}
-		remover_lista(&lista);
-		imprimir_lista(&lista);
+		int media;
+		printf("\nTempo Médio por PDV: \n");
+		for(int a = 0; a < setup.PDVsTamanho; a++){
+			media = 0;
+			printf(" %d -> ", a+1);
+			for(int b = 1; b <= setup.PDVsTemposAtendimento[a][0]; b++){
+				media = media + setup.PDVsTemposAtendimento[a][b];
+			}
+			media = media / setup.PDVsTemposAtendimento[a][0];
+			printf("%d\n", media);
+		}
+		int max;
+		printf("\nTempo Máximo por PDV: \n");
+		for(int a = 0; a < setup.PDVsTamanho; a++){
+			max = -1;
+			printf(" %d ->", a+1);
+			for(int b = 1; b <= setup.PDVsTemposAtendimento[a][0]; b++){
+				if(setup.PDVsTemposAtendimento[a][b] > max) max  = setup.PDVsTemposAtendimento[a][b];
+			}
+			printf(" %d\n", max);
+		}
+		printf("\nQuantidade de Desistencia por PDV: \n");
+		printf("\n Cliente tipo 1 -> ");
+		for(int a = 0; a < desistenciasTam; a++){
+			if(desistencias[a].tipo == 1){
+				printf("total de desistencias - %d\n tempo da desistencia - %f\n tempo maximo que o cliente esperaria pra ser atendido - %d\n tempo total que o cliente esperaria pra ser atendido - %d\n", desistenciasTam, desistencias[a].tempo, desistencias[a].tMax, desistencias[a].tTotal);
+			}
+		}
+		printf("\n Cliente tipo 2 -> ");
+		for(int a = 0; a < desistenciasTam; a++){
+			if(desistencias[a].tipo == 2){
+				printf("total de desistencias - %d\n tempo da desistencia - %f\n tempo maximo que o cliente esperaria pra ser atendido - %d\n tempo total que o cliente esperaria pra ser atendido - %d\n", desistenciasTam, desistencias[a].tempo, desistencias[a].tMax, desistencias[a].tTotal);
+			}
+		}
+		printf("\n Cliente tipo 3 -> ");
+		for(int a = 0; a < desistenciasTam; a++){
+			if(desistencias[a].tipo == 3){
+				printf("total de desistencias - %d\n tempo da desistencia - %f\n tempo maximo que o cliente esperaria pra ser atendido - %d\n tempo total que o cliente esperaria pra ser atendido - %d\n", desistenciasTam, desistencias[a].tempo, desistencias[a].tMax, desistencias[a].tTotal);
+			}
+		}
+		printf("\n");
+		fclose(arq);
 	}
-	//for(int i = 0; i < desistenciasTam; i++){
-		printf("\n* %d -> %d - %f - %d - %d *", desistenciasTam, desistencias[0].tipo, desistencias[0].tempo, desistencias[0].tMax, desistencias[0].tTotal);
-	//}
 	return 0;
 } 
